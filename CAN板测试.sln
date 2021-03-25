@@ -1,0 +1,44 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30907.101
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CAN板测试", "CAN板测试\CAN板测试.csproj", "{CAC5225C-CA7A-4CE0-9124-DCFBC43D9197}"
+	ProjectSection(ProjectDependencies) = postProject
+		{07423190-5B34-4506-BC84-DF0F380F2D28} = {07423190-5B34-4506-BC84-DF0F380F2D28}
+	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CANDriverLayer", "CANDriverLayer\CANDriverLayer.csproj", "{07423190-5B34-4506-BC84-DF0F380F2D28}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{CAC5225C-CA7A-4CE0-9124-DCFBC43D9197}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{CAC5225C-CA7A-4CE0-9124-DCFBC43D9197}.Debug|Any CPU.Build.0 = Debug|x64
+		{CAC5225C-CA7A-4CE0-9124-DCFBC43D9197}.Debug|x64.ActiveCfg = Debug|x64
+		{CAC5225C-CA7A-4CE0-9124-DCFBC43D9197}.Debug|x64.Build.0 = Debug|x64
+		{CAC5225C-CA7A-4CE0-9124-DCFBC43D9197}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CAC5225C-CA7A-4CE0-9124-DCFBC43D9197}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CAC5225C-CA7A-4CE0-9124-DCFBC43D9197}.Release|x64.ActiveCfg = Release|x64
+		{CAC5225C-CA7A-4CE0-9124-DCFBC43D9197}.Release|x64.Build.0 = Release|x64
+		{07423190-5B34-4506-BC84-DF0F380F2D28}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{07423190-5B34-4506-BC84-DF0F380F2D28}.Debug|Any CPU.Build.0 = Debug|x64
+		{07423190-5B34-4506-BC84-DF0F380F2D28}.Debug|x64.ActiveCfg = Debug|x64
+		{07423190-5B34-4506-BC84-DF0F380F2D28}.Debug|x64.Build.0 = Debug|x64
+		{07423190-5B34-4506-BC84-DF0F380F2D28}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{07423190-5B34-4506-BC84-DF0F380F2D28}.Release|Any CPU.Build.0 = Release|Any CPU
+		{07423190-5B34-4506-BC84-DF0F380F2D28}.Release|x64.ActiveCfg = Release|x64
+		{07423190-5B34-4506-BC84-DF0F380F2D28}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {4CB704B4-B48A-4A07-BB44-495584FCFA30}
+	EndGlobalSection
+EndGlobal
