@@ -15,8 +15,8 @@ namespace CANDriverLayer
     {
         private static UInt32 CANDeviceHandle;
 
-        private UInt32 canDviceType = CanCmd.LCMiniPcie_431;
-        private string canDeviceName = "LCMiniPcie_431";
+        private UInt32 canDviceType = CanCmd.LCMiniPcie_432;
+        private string canDeviceName = "LCMiniPcie_432";
         private UInt32 canDeviceChannel = 0;
 
         public CAN_InitConfig config = new CAN_InitConfig();
@@ -28,6 +28,12 @@ namespace CANDriverLayer
         private System.Threading.Timer timer1;
 
         private bool IsCANopen = false;
+
+        private DecodeData decodeData = new DecodeData();
+
+        public DecodeData.JSON JSON;
+
+        private int LostDataCount = 0;
 
         //---------------------------------------------------------------------------------------------------
 
@@ -71,81 +77,6 @@ namespace CANDriverLayer
         {
             return true;
         }
-
-        /// <summary>
-        /// CAN Json class
-        /// </summary>
-        public class JSON
-        {
-            //GPS
-            public string Mark { get; set; }
-
-            public string E { get; set; }
-            public string N { get; set; }
-            public string time { get; set; }
-            public string High { get; set; }
-            public string Speed { get; set; }
-            public string Path { get; set; }
-            public string CANerr { get; set; }
-            public string GPSerr { get; set; }
-
-            //CAN1
-            public string HXCS { get; set; }
-
-            public string ZXCS { get; set; }
-            public string XLGWY { get; set; }
-            public string XLGZJ { get; set; }
-
-            //CAN2
-            public string GTGD { get; set; }
-
-            public string BHLGD { get; set; }
-            public string XGD { get; set; }
-
-            //CAN3
-            public string DPZQ { get; set; }
-
-            public string DPYQ { get; set; }
-            public string DPZH { get; set; }
-            public string DPYH { get; set; }
-
-            //CAN4
-            public string QJSD { get; set; }
-
-            public string LZLL { get; set; }
-
-            //CAN5
-            public string ZGDZS { get; set; }
-
-            public string BHLZS { get; set; }
-            public string SSCZS { get; set; }
-            public string TLGT { get; set; }
-
-            //CAN6
-            public string FJZS { get; set; }
-
-            public string SLJLZS { get; set; }
-            public string ZYJLZS { get; set; }
-
-            //CAN7
-            public string QXSS { get; set; }
-
-            public string JDSS { get; set; }
-            public string TLJX { get; set; }
-            public string DLBKD { get; set; }
-            public string JFKKD { get; set; }
-            public string YLKSD { get; set; }
-
-            //CAN8
-            public string GFKD { get; set; }
-
-            public string HZL { get; set; }
-            public string PSL { get; set; }
-
-            public string GTGD_R { get; set; }
-        }
-
-        private JSON json = new JSON();
 
         /// <summary>
         /// 管理JSON接收数据
@@ -274,7 +205,7 @@ namespace CANDriverLayer
             /// 写入JSON数据
             /// </summary>
             /// <param name="jSON">JSON数据格式</param>
-            public void Write(JSON jSON)
+            public void Write(DecodeData.JSON jSON)
             {
                 CleanAll();
                 data[0] = jSON.TLGT;
@@ -341,7 +272,7 @@ namespace CANDriverLayer
                 name[1] = "卸粮筒旋转角度";
             }
 
-            public void Write(JSON jSON)
+            public void Write(DecodeData.JSON jSON)
             {
                 CleanAll();
                 data[0] = jSON.XLGWY;
@@ -395,7 +326,7 @@ namespace CANDriverLayer
                 name[7] = "割台高度右";
             }
 
-            public void Write(JSON jSON)
+            public void Write(DecodeData.JSON jSON)
             {
                 CleanAll();
                 data[0] = jSON.GTGD;
@@ -454,7 +385,7 @@ namespace CANDriverLayer
                 name[5] = "底盘右后液压缸位移";
             }
 
-            public void Write(JSON jSON)
+            public void Write(DecodeData.JSON jSON)
             {
                 CleanAll();
                 data[0] = jSON.HXCS;
@@ -507,7 +438,7 @@ namespace CANDriverLayer
                 name[2] = "海拔高度";
             }
 
-            public void Write(JSON jSON)
+            public void Write(DecodeData.JSON jSON)
             {
                 CleanAll();
                 //data[0] = jSON.JDSS;
@@ -546,9 +477,9 @@ namespace CANDriverLayer
         /// <summary>
         /// 获取JSON数据
         /// </summary>
-        public JSON GetJSON
+        public DecodeData.JSON GetJSON
         {
-            get { return json; }
+            get { return decodeData.getjson; }
         }
 
         #endregion CAN解析数据结构体
@@ -564,7 +495,10 @@ namespace CANDriverLayer
                 //check is have data
                 res = CanCmd.CAN_GetReceiveCount(CANDeviceHandle, canDeviceChannel);
                 if (res == 0)
+                {
+                    timer1.Change(10, 10);
                     return;//not receive data
+                }
 
                 /////////////////////////////////////
                 UInt32 con_maxlen = 50;
@@ -591,7 +525,7 @@ namespace CANDriverLayer
                     String str = "";
                     for (UInt32 i = 0; i < res; i++)
                     {
-                        CAN_DataFrame obj = (CAN_DataFrame)Marshal.PtrToStructure((IntPtr)((UInt32)pt + i * Marshal.SizeOf(typeof(CAN_DataFrame))), typeof(CAN_DataFrame));
+                        CAN_DataFrame obj = (CAN_DataFrame)Marshal.PtrToStructure((IntPtr)((UInt64)pt + (UInt64)(i * Marshal.SizeOf(typeof(CAN_DataFrame)))), typeof(CAN_DataFrame));
 
                         str = "[I]接收到数据: ";
                         str += "  帧ID:0x" + System.Convert.ToString((Int32)obj.uID, 16);
@@ -627,13 +561,25 @@ namespace CANDriverLayer
                                 str += " " + System.Convert.ToString(obj.arryData[6], 16);
                             if (j++ < len)
                                 str += " " + System.Convert.ToString(obj.arryData[7], 16);
+                            if (decodeData.DecodePacket(obj) || LostDataCount >= 8)
+                            {
+                                LostDataCount = 0;
+                                //this.received_TLQX(this, new EventArgs());
+                                //this.received_LX(this, new EventArgs());
+                                //this.received_GT(this, new EventArgs());
+                                //this.received_DP(this, new EventArgs());
+                                //this.received_JWD(this, new EventArgs());
+                            }
+                            else
+                                LostDataCount += 1;
                         }
                     }
                     str += "\n";
+
                     Info?.Invoke(str);
                 }
                 Marshal.FreeHGlobal(pt);
-                timer1.Change(100, 100);
+                timer1.Change(1, 10);
             }
         }
 
