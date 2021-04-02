@@ -39,7 +39,7 @@ namespace CANDriverLayer
 
         #region CAN解析数据结构体
 
-        public delegate void TLQX_ReceviedEventHandler(object sender, EventArgs e);
+        public delegate void TLQX_ReceviedEventHandler(DecodeData.JSON json);
 
         public event TLQX_ReceviedEventHandler received_TLQX;
 
@@ -496,7 +496,7 @@ namespace CANDriverLayer
                 res = CanCmd.CAN_GetReceiveCount(CANDeviceHandle, canDeviceChannel);
                 if (res == 0)
                 {
-                    timer1.Change(10, 10);
+                    timer1.Change(100, 100);
                     return;//not receive data
                 }
 
@@ -565,6 +565,7 @@ namespace CANDriverLayer
                             {
                                 LostDataCount = 0;
                                 //this.received_TLQX(this, new EventArgs());
+                                //received_TLQX?.Invoke(JSON);
                                 //this.received_LX(this, new EventArgs());
                                 //this.received_GT(this, new EventArgs());
                                 //this.received_DP(this, new EventArgs());
