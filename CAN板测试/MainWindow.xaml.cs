@@ -34,11 +34,12 @@ namespace CAN板测试
             comboBox.Items.Add("0");
             comboBox.Items.Add("1");
             comboBox.SelectedIndex = 0;
+            comboBox.IsEnabled = false;
 
             comboBox1.Items.Clear();
             comboBox1.Items.Add("0");
             comboBox1.Items.Add("1");
-            comboBox1.SelectedIndex = 0;
+            comboBox1.SelectedIndex = 1;
 
             CANDriverLayer.CanDriver.JWD_Data jWD_Data = new CanDriver.JWD_Data();
 
@@ -55,12 +56,20 @@ namespace CAN板测试
 
         private void send_Click(object sender, RoutedEventArgs e)
         {
+            if (sendtext.Text != "")
+                canDriver.Write(sendtext.Text);
         }
 
         private void Open_Click(object sender, RoutedEventArgs e)
         {
-            canDriver.OpenCAN(Convert.ToUInt32(comboBox.Text));
-            canDriver.OpenChannel(Convert.ToUInt32(comboBox1.Text));
+            //canDriver.OpenCAN(Convert.ToUInt32(comboBox.Text));
+            //canDriver.OpenChannel(Convert.ToUInt32(comboBox1.Text));
+            canDriver.OpenPort();
+        }
+
+        private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            canDriver.CloseCAN();
         }
     }
 }

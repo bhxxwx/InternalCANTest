@@ -1,13 +1,9 @@
-﻿using System;
+﻿using Laike.Can.CanCmd;   // 引用dll定义
+
+using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Newtonsoft.Json;
-using Laike.Can.CanCmd;   // 引用dll定义
-using System.Threading;
 using System.Runtime.InteropServices;
-using CANDriverLayer;
+using System.Threading;
 
 namespace CANDriverLayer
 {
@@ -33,7 +29,10 @@ namespace CANDriverLayer
 
         public DecodeData.JSON JSON;
 
-        private int LostDataCount = 0;
+        private Thread T_CANRecv;
+        private bool T_CANRecv_NeedDel = false;
+
+        private List<CAN_DataFrame> CANRecvedData = new List<CAN_DataFrame>();
 
         //---------------------------------------------------------------------------------------------------
 
@@ -43,31 +42,21 @@ namespace CANDriverLayer
 
         public event TLQX_ReceviedEventHandler received_TLQX;
 
-        public delegate void LX_ReceviedEventHandler(object sender, EventArgs e);
+        public delegate void LX_ReceviedEventHandler(DecodeData.JSON json);
 
         public event LX_ReceviedEventHandler received_LX;
 
-        public delegate void GT_ReceviedEventHandler(object sender, EventArgs e);
+        public delegate void GT_ReceviedEventHandler(DecodeData.JSON json);
 
         public event GT_ReceviedEventHandler received_GT;
 
-        public delegate void DP_ReceviedEventHandler(object sender, EventArgs e);
+        public delegate void DP_ReceviedEventHandler(DecodeData.JSON json);
 
         public event DP_ReceviedEventHandler received_DP;
 
-        public delegate void JWD_ReceviedEventHandler(object sender, EventArgs e);
+        public delegate void JWD_ReceviedEventHandler(DecodeData.JSON json);
 
         public event JWD_ReceviedEventHandler received_JWD;
-
-        /// <summary>
-        /// 将指定字符串写入串口
-        /// </summary>
-        /// <param name="str">字符串数据</param>
-        /// <returns>写入是否成功</returns>
-        public bool Write(string str)
-        {
-            return true;
-        }
 
         /// <summary>
         /// 获取串口是否为打开状态
@@ -488,100 +477,31 @@ namespace CANDriverLayer
 
         unsafe private void timer_rec_Tick(object status)
         {
-            if (IsCANopen)
+            if (CANRecvedData.Count == 0)
+                return;
+            timer1.Change(Timeout.Infinite, Timeout.Infinite);
+            int count = 0;
+            String str = "";
+            CANRecvedData.ForEach(a =>
             {
-                timer1.Change(Timeout.Infinite, Timeout.Infinite);//stop the timer!
-                UInt32 res = new UInt32();
-                //check is have data
-                res = CanCmd.CAN_GetReceiveCount(CANDeviceHandle, canDeviceChannel);
-                if (res == 0)
+                count = count + 1;
+                str += "[I]接收到数据: ";
+                str += "  帧ID:0x" + System.Convert.ToString((Int32)a.uID, 16);
+                str += "  数据: ";
+                for (int j = 0; j < 8; j++)
                 {
-                    timer1.Change(100, 100);
-                    return;//not receive data
+                    str += " " + System.Convert.ToString(a.arryData[j], 16) + "\n";
                 }
-
-                /////////////////////////////////////
-                UInt32 con_maxlen = 50;
-                IntPtr pt = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(CAN_DataFrame)) * (Int32)con_maxlen);
-
-                res = CanCmd.CAN_ChannelReceive(CANDeviceHandle, canDeviceChannel, pt, con_maxlen, 100);
-                ////////////////////////////////////////////////////////
-                if (res == 0)
-                { // 读取错误信息
-                    CAN_ErrorInformation err = new CAN_ErrorInformation();
-                    // 必须调用此函数
-                    if (CanCmd.CAN_GetErrorInfo(CANDeviceHandle, canDeviceChannel, ref err) == CanCmd.CAN_RESULT_OK)
-                    {  // CAN通讯有错误
-                       // 处理错误信息
-                        Info?.Invoke("[E]CAN通讯有错误: " + DecodeErrCode(err.uErrorCode));
-                    }
-                    else
-                    {  // 没有收到CAN数据
-                        Info?.Invoke("[E]没有收到CAN数据,获取错误信息失败");
-                    }
-                }
-                else
-                {
-                    String str = "";
-                    for (UInt32 i = 0; i < res; i++)
-                    {
-                        CAN_DataFrame obj = (CAN_DataFrame)Marshal.PtrToStructure((IntPtr)((UInt64)pt + (UInt64)(i * Marshal.SizeOf(typeof(CAN_DataFrame)))), typeof(CAN_DataFrame));
-
-                        str = "[I]接收到数据: ";
-                        str += "  帧ID:0x" + System.Convert.ToString((Int32)obj.uID, 16);
-                        str += "  帧格式:";
-                        if (obj.bRemoteFlag == 0)
-                            str += "数据帧 ";
-                        else
-                            str += "远程帧 ";
-                        if (obj.bExternFlag == 0)
-                            str += "标准帧 ";
-                        else
-                            str += "扩展帧 ";
-
-                        //////////////////////////////////////////
-                        if (obj.bRemoteFlag == 0)
-                        {
-                            str += "数据: ";
-                            byte len = (byte)(obj.nDataLen % 9);
-                            byte j = 0;
-                            if (j++ < len)
-                                str += " " + System.Convert.ToString(obj.arryData[0], 16);
-                            if (j++ < len)
-                                str += " " + System.Convert.ToString(obj.arryData[1], 16);
-                            if (j++ < len)
-                                str += " " + System.Convert.ToString(obj.arryData[2], 16);
-                            if (j++ < len)
-                                str += " " + System.Convert.ToString(obj.arryData[3], 16);
-                            if (j++ < len)
-                                str += " " + System.Convert.ToString(obj.arryData[4], 16);
-                            if (j++ < len)
-                                str += " " + System.Convert.ToString(obj.arryData[5], 16);
-                            if (j++ < len)
-                                str += " " + System.Convert.ToString(obj.arryData[6], 16);
-                            if (j++ < len)
-                                str += " " + System.Convert.ToString(obj.arryData[7], 16);
-                            if (decodeData.DecodePacket(obj) || LostDataCount >= 8)
-                            {
-                                LostDataCount = 0;
-                                //this.received_TLQX(this, new EventArgs());
-                                //received_TLQX?.Invoke(JSON);
-                                //this.received_LX(this, new EventArgs());
-                                //this.received_GT(this, new EventArgs());
-                                //this.received_DP(this, new EventArgs());
-                                //this.received_JWD(this, new EventArgs());
-                            }
-                            else
-                                LostDataCount += 1;
-                        }
-                    }
-                    str += "\n";
-
-                    Info?.Invoke(str);
-                }
-                Marshal.FreeHGlobal(pt);
-                timer1.Change(1, 10);
-            }
+                decodeData.DecodePacket(a);
+            });
+            CANRecvedData.RemoveRange(0, count);
+            received_TLQX?.Invoke(decodeData.getjson);
+            received_DP?.Invoke(decodeData.getjson);
+            received_GT?.Invoke(decodeData.getjson);
+            received_JWD?.Invoke(decodeData.getjson);
+            received_LX?.Invoke(decodeData.getjson);
+            Info?.Invoke(str);
+            timer1.Change(100, 100);
         }
 
         private static string DecodeErrCode(CAN_ErrorCode ErrCode)
@@ -610,9 +530,9 @@ namespace CANDriverLayer
         /// <summary>
         /// build function
         /// </summary>
-        public CanDriver()
+        public CanDriver(uint _channel = 1)
         {
-            timer1 = new System.Threading.Timer(new System.Threading.TimerCallback(timer_rec_Tick), this, 1000, 1000);
+            timer1 = new System.Threading.Timer(new System.Threading.TimerCallback(timer_rec_Tick), this, 100, 500);
             config.dwAccCode = System.Convert.ToUInt32("0x00000000", 16);
             config.dwAccMask = System.Convert.ToUInt32("0xFFFFFFFF", 16);
             config.nBtrType = 1;   // 位定时参数模式(1表示SJA1000,0表示LPC21XX)
@@ -622,13 +542,67 @@ namespace CANDriverLayer
             config.dwBtr1 = System.Convert.ToByte("0x1C", 16);
             config.nFilter = 0;
             config.bMode = 0;
+
+            //OpenCAN();
+            //OpenChannel(_channel);
+
+            T_CANRecv = new Thread(TRecv);
+            T_CANRecv.Name = "CAN_Recvive_Thread";
+            T_CANRecv.Start();
+        }
+
+        private unsafe void TRecv()
+        {
+            while (!T_CANRecv_NeedDel)
+            {
+                if (IsCANopen)
+                {
+                    //check is have data
+                    uint res = CanCmd.CAN_GetReceiveCount(CANDeviceHandle, canDeviceChannel);
+                    if (res == 0)
+                    {
+                        return;//not receive data
+                    }
+
+                    /////////////////////////////////////
+                    UInt32 con_maxlen = 50;
+                    IntPtr pt = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(CAN_DataFrame)) * (Int32)con_maxlen);
+
+                    res = CanCmd.CAN_ChannelReceive(CANDeviceHandle, canDeviceChannel, pt, con_maxlen, 100);
+                    ////////////////////////////////////////////////////////
+                    if (res == 0)
+                    {
+                        // 读取错误信息
+                        CAN_ErrorInformation err = new CAN_ErrorInformation();
+                        // 必须调用此函数
+                        if (CanCmd.CAN_GetErrorInfo(CANDeviceHandle, canDeviceChannel, ref err) == CanCmd.CAN_RESULT_OK)
+                        {  // CAN通讯有错误
+                           // 处理错误信息
+                            Info?.Invoke("[E]CAN通讯有错误: " + DecodeErrCode(err.uErrorCode));
+                        }
+                        else
+                        {  // 没有收到CAN数据
+                            Info?.Invoke("[E]没有收到CAN数据,获取错误信息失败");
+                        }
+                    }
+                    else
+                    {
+                        for (UInt32 i = 0; i < res; i++)
+                        {
+                            CAN_DataFrame obj = (CAN_DataFrame)Marshal.PtrToStructure((IntPtr)((UInt64)pt + (UInt64)(i * Marshal.SizeOf(typeof(CAN_DataFrame)))), typeof(CAN_DataFrame));
+                            CANRecvedData.Add(obj);
+                        }
+                    }
+                    Marshal.FreeHGlobal(pt);
+                }
+            }
         }
 
         /// <summary>
         /// </summary>
         /// <param name="CanDeceivePort"></param>
         /// <returns></returns>
-        public void OpenCAN(UInt32 CanDeceivePort = 0)
+        private void OpenCAN(UInt32 CanDeceivePort = 0)
         {
             char t_char = '0';
             CANDeviceHandle = CanCmd.CAN_DeviceOpen(canDviceType, CanDeceivePort, ref t_char);
@@ -643,7 +617,7 @@ namespace CANDriverLayer
         /// <summary>
         /// </summary>
         /// <param name="channel"></param>
-        public void OpenChannel(UInt32 channel)
+        private void OpenChannel(UInt32 channel)
         {
             canDeviceChannel = channel;
             if (CANDeviceHandle != 0)
@@ -665,6 +639,16 @@ namespace CANDriverLayer
         /// </summary>
         public void CloseCAN()
         {
+            try
+            {
+                T_CANRecv_NeedDel = true;
+                T_CANRecv.Abort();
+            }
+            catch (Exception ex)
+            {
+                Info?.Invoke("[I]关闭线程" + T_CANRecv.Name + "：" + ex.ToString());
+            }
+
             if (CanCmd.CAN_RESULT_OK != CanCmd.CAN_ChannelStop(CANDeviceHandle, canDeviceChannel))
             {
                 Info?.Invoke("[E]关闭" + canDeviceName + "设备的通道" + canDeviceChannel.ToString() + "失败");
@@ -674,6 +658,178 @@ namespace CANDriverLayer
             CanCmd.CAN_DeviceClose(CANDeviceHandle);
             IsCANopen = false;
             Info?.Invoke("[I]已关闭" + canDeviceName + "设备");
+        }
+
+        public void OpenPort(UInt32 _CanDeceivePort = 0, UInt32 _channel = 1)
+        {
+            OpenCAN(_CanDeceivePort);
+            OpenChannel(_channel);
+        }
+
+        private struct SendCMD
+        {
+            public uint ID;
+            public string Name;
+            public int Value;
+        }
+
+        private uint CheckID(string name)
+        {
+            var _name = name.Substring(0, 2);
+            switch (_name)
+            {
+                case "CL":
+                case "GT": return 0X0CFF5130;
+                case "GF": return 0X18FF5230;
+                case "SS": return 0X18FF5330;
+                case "TL": return 0X18FF5430;
+                case "SJ": return 0X18FF5530;
+                case "ZY": return 0X18FF5630;
+                case "SD":
+                case "QZ": return 0X18FF5730;
+                case "HZ":
+                case "PS": return 0x0CFF2615;
+                case "ZX": return 0X0CFF2717;
+            }
+            return 0;
+        }
+
+        private unsafe void OganizeData(List<SendCMD> cMDs, ref CAN_DataFrame cAN_Data)
+        {
+            for (int i = 0; i < cMDs.Count; i++)
+            {
+                var cmd = cMDs[i];
+                switch (cmd.Name)
+                {
+                    case "GT_PER":
+                        cAN_Data.arryData[0] = (byte)cmd.Value;
+                        cAN_Data.arryData[1] = (byte)(cmd.Value >> 8); break;
+                    case "GT_MAX":
+                        cAN_Data.arryData[2] = (byte)cmd.Value;
+                        cAN_Data.arryData[3] = (byte)(cmd.Value >> 8); break;
+                    case "GT_MIN":
+                        cAN_Data.arryData[4] = (byte)cmd.Value;
+                        cAN_Data.arryData[5] = (byte)(cmd.Value >> 8); break;
+
+                    case "GF_PER":
+                        cAN_Data.arryData[0] = (byte)cmd.Value;
+                        cAN_Data.arryData[1] = (byte)(cmd.Value >> 8); break;
+                    case "GF_MAX":
+                        cAN_Data.arryData[2] = (byte)cmd.Value;
+                        cAN_Data.arryData[3] = (byte)(cmd.Value >> 8); break;
+                    case "GF_MIN":
+                        cAN_Data.arryData[4] = (byte)cmd.Value;
+                        cAN_Data.arryData[5] = (byte)(cmd.Value >> 8); break;
+
+                    case "SD_MAX":
+                        cAN_Data.arryData[0] = (byte)cmd.Value;
+                        cAN_Data.arryData[1] = (byte)(cmd.Value >> 8); break;
+                    case "SD_MIN":
+                        cAN_Data.arryData[2] = (byte)cmd.Value;
+                        cAN_Data.arryData[3] = (byte)(cmd.Value >> 8); break;
+                    case "QZ_SS1":
+                        cAN_Data.arryData[4] = (byte)cmd.Value; break;
+                    case "QZ_TL2":
+                        cAN_Data.arryData[5] = (byte)cmd.Value; break;
+                    case "QZ_SL3":
+                        cAN_Data.arryData[6] = (byte)cmd.Value; break;
+                    case "QZ_ZY4":
+                        cAN_Data.arryData[7] = (byte)cmd.Value; break;
+
+                    case "SS_PER":
+                        cAN_Data.arryData[0] = (byte)cmd.Value;
+                        cAN_Data.arryData[1] = (byte)(cmd.Value >> 8); break;
+                    case "SS_MAX":
+                        cAN_Data.arryData[2] = (byte)cmd.Value;
+                        cAN_Data.arryData[3] = (byte)(cmd.Value >> 8); break;
+                    case "SS_MIN":
+                        cAN_Data.arryData[4] = (byte)cmd.Value;
+                        cAN_Data.arryData[5] = (byte)(cmd.Value >> 8); break;
+
+                    case "TL_PER":
+                        cAN_Data.arryData[0] = (byte)cmd.Value;
+                        cAN_Data.arryData[1] = (byte)(cmd.Value >> 8); break;
+                    case "TL_NAX":
+                        cAN_Data.arryData[2] = (byte)cmd.Value;
+                        cAN_Data.arryData[3] = (byte)(cmd.Value >> 8); break;
+                    case "TL_MIN":
+                        cAN_Data.arryData[4] = (byte)cmd.Value;
+                        cAN_Data.arryData[5] = (byte)(cmd.Value >> 8); break;
+
+                    case "SJ_PER":
+                        cAN_Data.arryData[0] = (byte)cmd.Value;
+                        cAN_Data.arryData[1] = (byte)(cmd.Value >> 8); break;
+                    case "SJ_MAX":
+                        cAN_Data.arryData[2] = (byte)cmd.Value;
+                        cAN_Data.arryData[3] = (byte)(cmd.Value >> 8); break;
+                    case "SJ_MIN":
+                        cAN_Data.arryData[4] = (byte)cmd.Value;
+                        cAN_Data.arryData[5] = (byte)(cmd.Value >> 8); break;
+
+                    case "ZY_PER":
+                        cAN_Data.arryData[0] = (byte)cmd.Value;
+                        cAN_Data.arryData[1] = (byte)(cmd.Value >> 8); break;
+                    case "ZY_MAX":
+                        cAN_Data.arryData[2] = (byte)cmd.Value;
+                        cAN_Data.arryData[3] = (byte)(cmd.Value >> 8); break;
+                    case "ZY_MIN":
+                        cAN_Data.arryData[2] = (byte)cmd.Value;
+                        cAN_Data.arryData[3] = (byte)(cmd.Value >> 8); break;
+
+                    case "ZX_CUR":
+                        cAN_Data.arryData[0] = (byte)cmd.Value;
+                        cAN_Data.arryData[1] = (byte)(cmd.Value >> 8); break;
+                    case "ZX_FLG":
+                        cAN_Data.arryData[2] = (byte)cmd.Value; break;
+                    case "ZX_TTF":
+                        cAN_Data.arryData[3] = (byte)cmd.Value; break;
+                    case "ZX_TTD":
+                        cAN_Data.arryData[4] = (byte)cmd.Value; break;
+
+                    case "CL_FLG":
+                        cAN_Data.arryData[6] = (byte)cmd.Value; break;
+
+                    case "HZL___":
+                        cAN_Data.arryData[5] = (byte)cmd.Value; break;
+
+                    case "PSL___":
+                        cAN_Data.arryData[6] = (byte)cmd.Value; break;
+                }
+            }
+        }
+
+        public bool Write(string str)
+        {
+            List<SendCMD> sendCMDs = new List<SendCMD>();
+            CAN_DataFrame sendobj = new CAN_DataFrame();
+            sendobj.nDataLen = 8;
+            str = str.Replace('$', ' ');
+            var cmds = str.Split(',');
+            for (int i = 0; i < cmds.Length; i++)
+            {
+                if (cmds[i] == "" || cmds[i] == ",")
+                    continue;
+                SendCMD a = new SendCMD();
+                a.Name = cmds[i].Substring(0, 6);
+                a.Value = Convert.ToInt32(cmds[i].Substring(6));
+                a.ID = CheckID(a.Name);
+                sendobj.uID = a.ID;
+                sendCMDs.Add(a);
+            }
+
+            sendobj.nSendType = 0;//Normal send
+            sendobj.bRemoteFlag = 0;//不是远程帧
+            sendobj.bExternFlag = 1;//扩展帧
+            sendobj.nDataLen = 8;
+            OganizeData(sendCMDs, ref sendobj);
+            if (IsCANopen)
+                if (CanCmd.CAN_ChannelSend(CANDeviceHandle, canDeviceChannel, ref sendobj, 1) == 0)
+                    Info?.Invoke("[E]发送失败");
+                else
+                    Info?.Invoke("[I]发送成功");
+            else
+                Info?.Invoke("[E]CAN未打开");
+            return true;
         }
     }
 }
