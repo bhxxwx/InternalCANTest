@@ -561,7 +561,7 @@ namespace CANDriverLayer
                     uint res = CanCmd.CAN_GetReceiveCount(CANDeviceHandle, canDeviceChannel);
                     if (res == 0)
                     {
-                        return;//not receive data
+                        continue;//not receive data
                     }
 
                     /////////////////////////////////////
@@ -803,7 +803,8 @@ namespace CANDriverLayer
             List<SendCMD> sendCMDs = new List<SendCMD>();
             CAN_DataFrame sendobj = new CAN_DataFrame();
             sendobj.nDataLen = 8;
-            str = str.Replace('$', ' ');
+            str = str.Substring(1);
+            str = str.Replace(';', ' ');
             var cmds = str.Split(',');
             for (int i = 0; i < cmds.Length; i++)
             {
@@ -811,6 +812,7 @@ namespace CANDriverLayer
                     continue;
                 SendCMD a = new SendCMD();
                 a.Name = cmds[i].Substring(0, 6);
+                var ttt = cmds[i].Substring(6);
                 a.Value = Convert.ToInt32(cmds[i].Substring(6));
                 a.ID = CheckID(a.Name);
                 sendobj.uID = a.ID;
