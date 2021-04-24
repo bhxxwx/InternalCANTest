@@ -784,7 +784,8 @@ namespace CANDriverLayer
                     case "ZX_TTF":
                         cAN_Data.arryData[3] = (byte)cmd.Value; break;
                     case "ZX_TTD":
-                        cAN_Data.arryData[4] = (byte)cmd.Value; break;
+                        cAN_Data.arryData[4] = (byte)cmd.Value;
+                        cAN_Data.arryData[5] = (byte)(cmd.Value >> 8); break;
 
                     case "CL_FLG":
                         cAN_Data.arryData[6] = (byte)cmd.Value; break;
