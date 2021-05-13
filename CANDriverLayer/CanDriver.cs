@@ -32,7 +32,10 @@ namespace CANDriverLayer
         private Thread T_CANRecv;
         private bool T_CANRecv_NeedDel = false;
 
-        private List<CAN_DataFrame> CANRecvedData = new List<CAN_DataFrame>();
+        private bool WriteDataToCANRecvData = false;
+        private bool CANRecvDataIsReading = false;
+
+        private LinkedList<CAN_DataFrame> CANRecvedData = new LinkedList<CAN_DataFrame>();
 
         //---------------------------------------------------------------------------------------------------
 
@@ -298,11 +301,11 @@ namespace CANDriverLayer
         {
             private string[] data;
             private string[] name;
-            private int len;
+            private int len = 0;
 
             public GT_Data()
             {
-                len = 8;
+                len = 9;
                 data = new string[len];
                 name = new string[len];
                 name[0] = "割台高度左";
@@ -313,6 +316,7 @@ namespace CANDriverLayer
                 name[5] = "输送槽转速";
                 name[6] = "割幅宽度";
                 name[7] = "割台高度右";
+                name[8] = "前进速度";
             }
 
             public void Write(DecodeData.JSON jSON)
@@ -326,6 +330,7 @@ namespace CANDriverLayer
                 data[5] = jSON.SSCZS;
                 data[6] = jSON.GFKD;
                 data[7] = jSON.GTGD_R;
+                data[8] = jSON.QJSD;
             }
 
             public string GetValue(int i)
@@ -475,35 +480,62 @@ namespace CANDriverLayer
 
         //---------------------------------------------------------------------------------------------------
 
+        /// <summary>
+        /// 定时解析CAN接收队列中的数据
+        /// </summary>
+        /// <param name="status"></param>
         unsafe private void timer_rec_Tick(object status)
         {
-            if (CANRecvedData.Count == 0)
+            if (CANRecvedData.Count <= 1)
+                return;
+            if (WriteDataToCANRecvData == true)
                 return;
             timer1.Change(Timeout.Infinite, Timeout.Infinite);
-            int count = 0;
+            //int count = 0;
             String str = "";
-            CANRecvedData.ForEach(a =>
+
+            for (int i = 0; i < CANRecvedData.Count - 1; i++)
             {
-                count = count + 1;
+                var dataFram = CANRecvedData.First.Value;
                 str += "[I]接收到数据: ";
-                str += "  帧ID:0x" + System.Convert.ToString((Int32)a.uID, 16);
+                str += "  帧ID:0x" + System.Convert.ToString((Int32)dataFram.uID, 16);
                 str += "  数据: ";
                 for (int j = 0; j < 8; j++)
                 {
-                    str += " " + System.Convert.ToString(a.arryData[j], 16) + "\n";
+                    str += " " + System.Convert.ToString(dataFram.arryData[j], 16) + "\n";
                 }
-                decodeData.DecodePacket(a);
-            });
-            CANRecvedData.RemoveRange(0, count);
+                decodeData.DecodePacket(dataFram);
+                CANRecvedData.RemoveFirst();
+            }
+
+            //CANRecvedData.ForEach(a =>
+            //{
+            //    count = count + 1;
+            //    str += "[I]接收到数据: ";
+            //    str += "  帧ID:0x" + System.Convert.ToString((Int32)a.uID, 16);
+            //    str += "  数据: ";
+            //    for (int j = 0; j < 8; j++)
+            //    {
+            //        str += " " + System.Convert.ToString(a.arryData[j], 16) + "\n";
+            //    }
+            //    decodeData.DecodePacket(a);
+            //});
+            //CANRecvedData.RemoveRange(0, count);
+            CANRecvDataIsReading = false;
             received_TLQX?.Invoke(decodeData.getjson);
             received_DP?.Invoke(decodeData.getjson);
             received_GT?.Invoke(decodeData.getjson);
             received_JWD?.Invoke(decodeData.getjson);
             received_LX?.Invoke(decodeData.getjson);
             Info?.Invoke(str);
-            timer1.Change(100, 100);
+            timer1.Change(1, 1);
         }
 
+        /// <summary>
+        /// 将错误码转换为错误原因
+        /// </summary>
+        /// <param name="ErrCode">错误码</param>
+        /// <returns>错误原因 中文string</returns>
         private static string DecodeErrCode(CAN_ErrorCode ErrCode)
         {
             switch (ErrCode)
@@ -528,7 +560,7 @@ namespace CANDriverLayer
         }
 
         /// <summary>
-        /// build function
+        /// 构造函数 使能CAN卡,设定频率,创建线程
         /// </summary>
         public CanDriver(uint _channel = 1)
         {
@@ -551,6 +583,9 @@ namespace CANDriverLayer
             T_CANRecv.Start();
         }
 
+        /// <summary>
+        /// CAN卡数据接收线程
+        /// </summary>
         private unsafe void TRecv()
         {
             while (!T_CANRecv_NeedDel)
@@ -565,7 +600,7 @@ namespace CANDriverLayer
                     }
 
                     /////////////////////////////////////
-                    UInt32 con_maxlen = 50;
+                    UInt32 con_maxlen = 500;
                     IntPtr pt = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(CAN_DataFrame)) * (Int32)con_maxlen);
 
                     res = CanCmd.CAN_ChannelReceive(CANDeviceHandle, canDeviceChannel, pt, con_maxlen, 100);
@@ -584,23 +619,27 @@ namespace CANDriverLayer
                         {  // 没有收到CAN数据
                             Info?.Invoke("[E]没有收到CAN数据,获取错误信息失败");
                         }
+                        CanCmd.CAN_ClearReceiveBuffer(CANDeviceHandle, canDeviceChannel);
                     }
                     else
                     {
+                        WriteDataToCANRecvData = true;
                         for (UInt32 i = 0; i < res; i++)
                         {
                             CAN_DataFrame obj = (CAN_DataFrame)Marshal.PtrToStructure((IntPtr)((UInt64)pt + (UInt64)(i * Marshal.SizeOf(typeof(CAN_DataFrame)))), typeof(CAN_DataFrame));
-                            CANRecvedData.Add(obj);
+                            CANRecvedData.AddLast(obj);
                         }
                     }
+                    WriteDataToCANRecvData = false;
                     Marshal.FreeHGlobal(pt);
                 }
             }
         }
 
         /// <summary>
+        /// 打开CAN卡
         /// </summary>
-        /// <param name="CanDeceivePort"></param>
+        /// <param name="CanDeceivePort">打开的端口号</param>
         /// <returns></returns>
         private void OpenCAN(UInt32 CanDeceivePort = 0)
         {
@@ -615,8 +654,9 @@ namespace CANDriverLayer
         }
 
         /// <summary>
+        /// 打开通道
         /// </summary>
-        /// <param name="channel"></param>
+        /// <param name="channel">通道号</param>
         private void OpenChannel(UInt32 channel)
         {
             canDeviceChannel = channel;
@@ -635,7 +675,7 @@ namespace CANDriverLayer
         }
 
         /// <summary>
-        /// close the can device
+        /// 关闭CAN卡
         /// </summary>
         public void CloseCAN()
         {
@@ -660,12 +700,20 @@ namespace CANDriverLayer
             Info?.Invoke("[I]已关闭" + canDeviceName + "设备");
         }
 
+        /// <summary>
+        /// 打开CAN卡设备与其通道 此函数以便兼容旧代码
+        /// </summary>
+        /// <param name="_CanDeceivePort">设备端口号</param>
+        /// <param name="_channel">通道号</param>
         public void OpenPort(UInt32 _CanDeceivePort = 0, UInt32 _channel = 1)
         {
             OpenCAN(_CanDeceivePort);
             OpenChannel(_channel);
         }
 
+        /// <summary>
+        /// 发送命令的结构体
+        /// </summary>
         private struct SendCMD
         {
             public uint ID;
@@ -673,6 +721,11 @@ namespace CANDriverLayer
             public int Value;
         }
 
+        /// <summary>
+        /// 解析发送命令的命令头对应的CAN包的扩展ID
+        /// </summary>
+        /// <param name="name">发送命令</param>
+        /// <returns>扩展ID</returns>
         private uint CheckID(string name)
         {
             var _name = name.Substring(0, 2);
@@ -694,6 +747,11 @@ namespace CANDriverLayer
             return 0;
         }
 
+        /// <summary>
+        /// 组织数据成为一个完整的CAN包
+        /// </summary>
+        /// <param name="cMDs">发送命令List</param>
+        /// <param name="cAN_Data">CAN数据包</param>
         private unsafe void OganizeData(List<SendCMD> cMDs, ref CAN_DataFrame cAN_Data)
         {
             for (int i = 0; i < cMDs.Count; i++)
@@ -799,13 +857,18 @@ namespace CANDriverLayer
             }
         }
 
+        /// <summary>
+        /// 对外接口,通过CAN发送数据
+        /// </summary>
+        /// <param name="str">发送数据的命令</param>
+        /// <returns>发送状态</returns>
         public bool Write(string str)
         {
             List<SendCMD> sendCMDs = new List<SendCMD>();
             CAN_DataFrame sendobj = new CAN_DataFrame();
             sendobj.nDataLen = 8;
-            str = str.Substring(1);
-            str = str.Replace(';', ' ');
+            //str = str.Substring(1);
+            str = str.Replace('$', ' ');
             var cmds = str.Split(',');
             for (int i = 0; i < cmds.Length; i++)
             {

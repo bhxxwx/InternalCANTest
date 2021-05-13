@@ -43,6 +43,8 @@ namespace CAN板测试
 
             CANDriverLayer.CanDriver.JWD_Data jWD_Data = new CanDriver.JWD_Data();
 
+            CANDriverLayer.CanDriver.GT_Data vvv = new CanDriver.GT_Data();
+            MessageBox.Show(vvv.Len.ToString());
             //CanDriver
         }
 
